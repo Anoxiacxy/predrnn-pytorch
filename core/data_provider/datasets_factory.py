@@ -1,9 +1,10 @@
-from core.data_provider import kth_action, mnist, bair
+from core.data_provider import kth_action, mnist, bair, balls
 
 datasets_map = {
     'mnist': mnist,
     'action': kth_action,
     'bair': bair,
+    'balls': balls,
 }
 
 
@@ -50,6 +51,34 @@ def data_provider(dataset_name, train_data_paths, valid_data_paths, batch_size,
         else:
             test_input_handle = input_handle.get_test_input_handle()
             test_input_handle.begin(do_shuffle=False)
+            return test_input_handle
+
+    if dataset_name == 'balls':
+        test_input_param = {'paths': valid_data_list,
+                            'image_width': img_width,
+                            'minibatch_size': batch_size,
+                            'seq_length': seq_length,
+                            'input_data_type': 'float32',
+                            'name': dataset_name + ' iterator',
+                            'mode': 'val',
+                            'load_cd': False,
+                            'sampling_mode': 'full'}
+        test_input_handle = datasets_map[dataset_name].InputHandle(test_input_param)
+        test_input_handle.begin(do_shuffle=False)
+        if is_training:
+            train_input_param = {'paths': train_data_list,
+                                 'image_width': img_width,
+                                 'minibatch_size': batch_size,
+                                 'seq_length': seq_length,
+                                 'input_data_type': 'float32',
+                                 'name': dataset_name + ' iterator',
+                                 'mode': 'train',
+                                 'load_cd': False,
+                                 'sampling_mode': 'full'}
+            train_input_handle = datasets_map[dataset_name].InputHandle(train_input_param)
+            train_input_handle.begin(do_shuffle=True)
+            return train_input_handle, test_input_handle
+        else:
             return test_input_handle
 
     if dataset_name == 'bair':

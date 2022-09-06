@@ -2,12 +2,18 @@ import os.path
 import datetime
 import cv2
 import numpy as np
-from skimage.measure import compare_ssim
+from skimage.metrics import structural_similarity
 from core.utils import preprocess, metrics
 import lpips
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 loss_fn_alex = lpips.LPIPS(net='alex')
+writer = SummaryWriter(
+    log_dir="/root/Logs/pred-rnn-v2",
+    max_queue=10,
+    flush_secs=60,
+    filename_suffix='')
 
 
 def train(model, ims, real_input_flag, configs, itr):
@@ -16,6 +22,12 @@ def train(model, ims, real_input_flag, configs, itr):
         ims_rev = np.flip(ims, axis=1).copy()
         cost += model.train(ims_rev, real_input_flag)
         cost = cost / 2
+
+    writer.add_scalar(
+        tag="loss/train-pred-rnn",
+        scalar_value=cost,
+        global_step=itr
+    )
 
     if itr % configs.display_interval == 0:
         print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'itr: ' + str(itr))
@@ -62,7 +74,7 @@ def test(model, test_input_handle, configs, itr):
         img_gen = model.test(test_dat, real_input_flag)
 
         img_gen = preprocess.reshape_patch_back(img_gen, configs.patch_size)
-        output_length = configs.total_length - configs.input_length 
+        output_length = configs.total_length - configs.input_length
         img_out = img_gen[:, -output_length:]
 
         # MSE per frame
@@ -103,7 +115,7 @@ def test(model, test_input_handle, configs, itr):
 
             psnr[i] += metrics.batch_psnr(pred_frm, real_frm)
             for b in range(configs.batch_size):
-                score, _ = compare_ssim(pred_frm[b], real_frm[b], full=True, multichannel=True)
+                score, _ = structural_similarity(pred_frm[b], real_frm[b], full=True, multichannel=True)
                 ssim[i] += score
 
         # save prediction examples
@@ -127,20 +139,60 @@ def test(model, test_input_handle, configs, itr):
 
     avg_mse = avg_mse / (batch_id * configs.batch_size)
     print('mse per seq: ' + str(avg_mse))
+    writer.add_scalar(
+        tag="mse/val-pred-rnn",
+        scalar_value=avg_mse,
+        global_step=itr
+    )
     for i in range(configs.total_length - configs.input_length):
         print(img_mse[i] / (batch_id * configs.batch_size))
+        writer.add_scalar(
+            tag=f"mse/val-{itr}-pred-rnn",
+            scalar_value=img_mse[i] / (batch_id * configs.batch_size),
+            global_step=i + configs.input_length
+        )
 
     ssim = np.asarray(ssim, dtype=np.float32) / (configs.batch_size * batch_id)
     print('ssim per frame: ' + str(np.mean(ssim)))
+    writer.add_scalar(
+        tag="ssim/val-pred-rnn",
+        scalar_value=np.mean(ssim),
+        global_step=itr
+    )
     for i in range(configs.total_length - configs.input_length):
         print(ssim[i])
+        writer.add_scalar(
+            tag=f"ssim/val-{itr}-pred-rnn",
+            scalar_value=ssim[i],
+            global_step=i + configs.input_length
+        )
 
     psnr = np.asarray(psnr, dtype=np.float32) / batch_id
     print('psnr per frame: ' + str(np.mean(psnr)))
+    writer.add_scalar(
+        tag="psnr/val-pred-rnn",
+        scalar_value=np.mean(psnr),
+        global_step=itr
+    )
     for i in range(configs.total_length - configs.input_length):
         print(psnr[i])
+        writer.add_scalar(
+            tag=f"psnr/val-{itr}-pred-rnn",
+            scalar_value=psnr[i],
+            global_step=i + configs.input_length
+        )
 
     lp = np.asarray(lp, dtype=np.float32) / batch_id
     print('lpips per frame: ' + str(np.mean(lp)))
+    writer.add_scalar(
+        tag="lpips/val-pred-rnn",
+        scalar_value=np.mean(lp),
+        global_step=itr
+    )
     for i in range(configs.total_length - configs.input_length):
         print(lp[i])
+        writer.add_scalar(
+            tag=f"lp/val-{itr}-pred-rnn",
+            scalar_value=lp[i],
+            global_step=i + configs.input_length
+        )
